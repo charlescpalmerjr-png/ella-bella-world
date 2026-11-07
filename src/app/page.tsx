@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import EndlessRunner, { WORD_BANK, isSafeImageDataUrl } from "@/components/EndlessRunner";
 import LearnSession from "@/components/LearnSession";
 import ColoringStudio from "@/components/ColoringStudio";
+import BeatLab from "@/components/BeatLab";
 import { getAudioContext, unlockAudio } from "@/lib/audio";
 import { initSpeech, speakSegments, type SpeechLang, type SpeechSegment } from "@/lib/speech";
 import { judgePronunciation } from "@/lib/pronunciation";
@@ -1012,30 +1013,8 @@ export default function EllaBellaPlatform() {
               </div>
             </div>
 
-            {/* Interactive 4-Pad Hip-Hop Drum Machine */}
-            <div className="bg-white rounded-[2rem] p-5 border-4 border-purple-400 shadow-md space-y-3">
-              <h3 className="text-lg font-black text-slate-900">
-                🥁 Make Your Own Hip-Hop Beat (Tap the Drum Pads!)
-              </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  { id: "kick", label: "🥁 BOOM KICK", color: "from-pink-500 to-rose-600" },
-                  { id: "snare", label: "👏🏽 CLAP SNARE", color: "from-cyan-400 to-teal-500" },
-                  { id: "hat", label: "✨ HI-HAT TICK", color: "from-amber-400 to-orange-500" },
-                  { id: "bass", label: "🎹 808 BASS DROP", color: "from-purple-500 to-indigo-600" },
-                ].map((pad) => (
-                  <button
-                    key={pad.id}
-                    onClick={() =>
-                      playDrumHit(pad.id as "kick" | "snare" | "hat" | "bass")
-                    }
-                    className={`py-5 rounded-3xl bg-gradient-to-b ${pad.color} text-white font-black text-sm sm:text-base border-4 border-white shadow-lg active:translate-y-1 cursor-pointer`}
-                  >
-                    {pad.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* PASS 08: real 16-step sequencer on the audio clock (replaces the tap pads) */}
+            <BeatLab earnStars={earnStars} />
           </div>
         )}
       </main>
