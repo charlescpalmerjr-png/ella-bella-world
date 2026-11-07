@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import EndlessRunner, { WORD_BANK, isSafeImageDataUrl } from "@/components/EndlessRunner";
+import LearnSession from "@/components/LearnSession";
 import { getAudioContext, unlockAudio } from "@/lib/audio";
 import { initSpeech, speakSegments, type SpeechLang, type SpeechSegment } from "@/lib/speech";
 import { judgePronunciation } from "@/lib/pronunciation";
@@ -30,6 +31,9 @@ type VocabLesson = {
   bg: string;
   shadow: string;
 };
+
+// PASS 06: bump when lesson content changes, so saved progress can be migrated.
+const CURRICULUM_VERSION = 1;
 
 const CURRICULUM: VocabLesson[] = [
   {
@@ -248,12 +252,8 @@ export default function EllaBellaPlatform() {
 
   // Learn & Quiz State
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
-  const [quizTarget, setQuizTarget] = useState<VocabLesson>(CURRICULUM[1]);
-  const [quizFeedback, setQuizFeedback] = useState<string>(
-    "Tap '🔊 Hear Mystery Word' then pick the matching card!"
-  );
   const [micStatus, setMicStatus] = useState<string>(
-    "Tap '🎙️ Practice on Mic' and say the Spanish phrase out loud!"
+    "Tap 🎙️ Say it to practice saying the word out loud!"
   );
 
   // Coloring Studio State
@@ -836,50 +836,17 @@ export default function EllaBellaPlatform() {
         {/* TAB 2: INTERACTIVE BILINGUAL DOJO, LISTENING QUIZ & MICROPHONE PRACTICE */}
         {activeTab === "words" && (
           <div className="space-y-6 pt-1">
-            {/* Interactive Listening Challenge & Mic Check */}
-            <div className="bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-600 rounded-[2rem] p-6 border-4 border-white shadow-[0_8px_0_#0f766e] text-white space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <span className="px-3 py-1 rounded-full bg-yellow-300 text-slate-950 font-black text-xs uppercase">
-                    🎯 Interactive Bilingual Quiz & Mic Check
-                  </span>
-                  <h2 className="text-2xl sm:text-3xl font-black mt-1">
-                    Challenge Ella Bella! (+35 XP Stars)
-                  </h2>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => {
-                      const randomWord =
-                        CURRICULUM[Math.floor(Math.random() * CURRICULUM.length)];
-                      setQuizTarget(randomWord);
-                      setQuizFeedback(
-                        `🎧 Listen! Which card below means "${randomWord.es}"?`
-                      );
-                      speakInstant(randomWord.es, "es-US");
-                    }}
-                    className="px-5 py-3 rounded-full bg-yellow-300 hover:bg-yellow-200 text-slate-950 font-black text-sm border-3 border-white shadow cursor-pointer"
-                  >
-                    🔊 Hear Mystery Word (<span lang="es">{quizTarget.es}</span>)
-                  </button>
-                  <button
-                    onClick={() => startMicPractice(quizTarget.es)}
-                    className="px-5 py-3 rounded-full bg-pink-500 hover:bg-pink-400 text-white font-black text-sm border-3 border-white shadow cursor-pointer"
-                  >
-                    🎙️ Practice Saying It on Mic
-                  </button>
-                </div>
-              </div>
+            {/* PASS 06: spaced-retrieval teaching session (replaces the random mystery-word quiz) */}
+            <LearnSession
+              words={CURRICULUM.map(({ id, es, en, emoji }) => ({ id, es, en, emoji }))}
+              curriculumVersion={CURRICULUM_VERSION}
+              speakInstant={speakInstant}
+              earnStars={earnStars}
+              startMicPractice={startMicPractice}
+              micStatus={micStatus}
+            />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm font-black">
-                <div className="bg-white/20 p-3 rounded-2xl border border-white/40">
-                  {quizFeedback}
-                </div>
-                <div className="bg-slate-900/40 p-3 rounded-2xl border border-cyan-300">
-                  {micStatus}
-                </div>
-              </div>
-            </div>
+            <h3 className="text-xl font-black text-slate-800">📚 Word Library</h3>
 
             {/* Category Filter Pills */}
             <div className="flex flex-wrap gap-2">
@@ -918,25 +885,6 @@ export default function EllaBellaPlatform() {
                         English: {card.en}
                       </p>
                     </div>
-                    <button
-                      onClick={() => {
-                        if (card.id === quizTarget.id) {
-                          earnStars(35);
-                          setQuizFeedback(
-                            `🎉 ¡CORRECTO! ${card.es} means ${card.en}! (+35 Stars!)`
-                          );
-                          speakInstant([{ text: `¡Correcto! ${card.es}`, lang: "es-US" }, { text: `means ${card.en}!`, lang: "en-US" }]);
-                        } else {
-                          setQuizFeedback(
-                            `Try again! That was ${card.es}. Find "${quizTarget.es}"!`
-                          );
-                          speakInstant([{ text: "That is", lang: "en-US" }, { text: card.es, lang: "es-US" }, { text: "Try again!", lang: "en-US" }]);
-                        }
-                      }}
-                      className="px-3.5 py-2 rounded-2xl bg-yellow-300 hover:bg-yellow-200 text-slate-950 font-black text-xs shadow cursor-pointer shrink-0"
-                    >
-                      ✅ Match Quiz
-                    </button>
                   </div>
 
                   <div className="bg-black/20 p-3 rounded-2xl text-xs space-y-1">
