@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import EndlessRunner, { WORD_BANK, isSafeImageDataUrl } from "@/components/EndlessRunner";
 import LearnSession from "@/components/LearnSession";
+import ColoringStudio from "@/components/ColoringStudio";
 import { getAudioContext, unlockAudio } from "@/lib/audio";
 import { initSpeech, speakSegments, type SpeechLang, type SpeechSegment } from "@/lib/speech";
 import { judgePronunciation } from "@/lib/pronunciation";
@@ -256,12 +257,6 @@ export default function EllaBellaPlatform() {
     "Tap 🎙️ Say it to practice saying the word out loud!"
   );
 
-  // Coloring Studio State
-  const coloringCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [brushColor, setBrushColor] = useState<string>("#ec4899");
-  const [brushSize, setBrushSize] = useState<number>(14);
-  const [coloringTemplate, setColoringTemplate] = useState<number>(0);
 
   // Store & Checkout State
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -424,104 +419,6 @@ export default function EllaBellaPlatform() {
     } catch {
       setMicStatus(`🎤 The mic couldn't start. Tap to try "${targetEs}" again.`);
     }
-  };
-
-  // Initialize Interactive Digital Coloring Book Canvas whenever Tab 3 or template changes
-  const drawColoringTemplate = useCallback((templateIdx: number) => {
-    const canvas = coloringCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.strokeStyle = "#0f172a";
-    ctx.lineWidth = 4;
-    ctx.font = "900 26px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#0f172a";
-
-    if (templateIdx === 0) {
-      ctx.fillText("ELLA BELLA • ¡EL RITMO HIP-HOP!", 350, 42);
-      // Draw Outline Ella Bella Face & Glasses to Color In
-      ctx.beginPath();
-      ctx.arc(350, 145, 55, 0, Math.PI * 2);
-      ctx.stroke();
-      // Round Glasses Outlines
-      ctx.beginPath();
-      ctx.arc(330, 140, 22, 0, Math.PI * 2);
-      ctx.arc(372, 140, 22, 0, Math.PI * 2);
-      ctx.stroke();
-      // Smile
-      ctx.beginPath();
-      ctx.arc(350, 158, 20, 0, Math.PI);
-      ctx.stroke();
-      // Boombox Outline
-      ctx.strokeRect(120, 140, 110, 75);
-      ctx.beginPath();
-      ctx.arc(150, 180, 18, 0, Math.PI * 2);
-      ctx.arc(200, 180, 18, 0, Math.PI * 2);
-      ctx.stroke();
-      // Star Outline
-      ctx.beginPath();
-      ctx.arc(540, 165, 42, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.font = "900 20px sans-serif";
-      ctx.fillText("COLOR ME! • ¡COLOREAME!", 350, 255);
-    } else if (templateIdx === 1) {
-      ctx.fillText("LA ESTRELLA • SPACE SALSA ROCKET", 350, 42);
-      // Rocket & Planets to color
-      ctx.beginPath();
-      ctx.arc(200, 150, 48, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.strokeRect(310, 95, 80, 115);
-      ctx.beginPath();
-      ctx.arc(510, 150, 45, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillText("🌟 YO SOY UNA ESTRELLA 🌟", 350, 255);
-    } else {
-      ctx.fillText("LA HISTORIA • NEW JERSEY & HARLEM", 350, 42);
-      // Skyline & Open History Book
-      ctx.strokeRect(120, 90, 90, 130);
-      ctx.strokeRect(230, 115, 110, 105);
-      ctx.strokeRect(360, 80, 95, 140);
-      ctx.strokeRect(475, 110, 105, 110);
-      ctx.fillText("📚 KNOWLEDGE IS SUPERPOWER 📚", 350, 255);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === "shop") {
-      setTimeout(() => drawColoringTemplate(coloringTemplate), 50);
-    }
-  }, [activeTab, coloringTemplate, drawColoringTemplate]);
-
-  const paintOnCanvas = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    const canvas = coloringCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * canvas.width;
-    const y = ((e.clientY - rect.top) / rect.height) * canvas.height;
-
-    ctx.fillStyle = brushColor;
-    ctx.beginPath();
-    ctx.arc(x, y, brushSize, 0, Math.PI * 2);
-    ctx.fill();
-  };
-
-  const downloadColoredArtwork = () => {
-    const canvas = coloringCanvasRef.current;
-    if (!canvas) return;
-    const link = document.createElement("a");
-    link.download = "ella-bella-masterpiece.png";
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-    earnStars(30);
-    speakInstant([{ text: "¡Obra de arte guardada!", lang: "es-US" }, { text: "Artwork saved!", lang: "en-US" }]);
   };
 
   // Web Audio API Synthesized Hip-Hop Drum Machine for Beat Lab & Sing-Along TV
@@ -930,100 +827,8 @@ export default function EllaBellaPlatform() {
         {/* TAB 3: INTERACTIVE DIGITAL COLORING STUDIO + P.O.D. STOREFRONT */}
         {activeTab === "shop" && (
           <div className="space-y-6 pt-1">
-            {/* REAL ON-SCREEN INTERACTIVE COLORING STUDIO */}
-            <div className="bg-white rounded-[2rem] p-5 sm:p-6 border-4 border-pink-400 shadow-[0_8px_0_#f472b6] space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <span className="px-3 py-1 rounded-full bg-pink-100 text-pink-700 font-black text-xs uppercase">
-                    🖍️ Interactive Digital Coloring Book Studio
-                  </span>
-                  <h2 className="text-2xl font-black text-slate-900 mt-1">
-                    Paint Ella Bella Right on Screen, Save or Print!
-                  </h2>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {["Page 1: Hip-Hop Ella", "Page 2: Space Rocket", "Page 3: NJ History"].map(
-                    (lbl, idx) => (
-                      <button
-                        key={lbl}
-                        onClick={() => {
-                          setColoringTemplate(idx);
-                          drawColoringTemplate(idx);
-                        }}
-                        className={`px-3.5 py-1.5 rounded-full font-black text-xs cursor-pointer ${
-                          coloringTemplate === idx
-                            ? "bg-pink-500 text-white"
-                            : "bg-slate-100 text-slate-700"
-                        }`}
-                      >
-                        {lbl}
-                      </button>
-                    )
-                  )}
-                </div>
-              </div>
-
-              {/* Paint Palette & Brush Controls */}
-              <div className="flex flex-wrap items-center justify-between gap-3 bg-sky-50 p-3 rounded-2xl border-2 border-sky-200">
-                <div className="flex flex-wrap items-center gap-2">
-                  {COLOR_PALETTE.map((hex) => (
-                    <button
-                      key={hex}
-                      onClick={() => setBrushColor(hex)}
-                      style={{ backgroundColor: hex }}
-                      className={`w-8 h-8 rounded-full border-3 cursor-pointer transition ${
-                        brushColor === hex ? "border-slate-950 scale-125" : "border-white"
-                      }`}
-                    />
-                  ))}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setBrushSize(8)}
-                    className={`px-3 py-1 rounded-xl font-black text-xs cursor-pointer ${
-                      brushSize === 8 ? "bg-slate-900 text-white" : "bg-white"
-                    }`}
-                  >
-                    ✏️ Fine
-                  </button>
-                  <button
-                    onClick={() => setBrushSize(16)}
-                    className={`px-3 py-1 rounded-xl font-black text-xs cursor-pointer ${
-                      brushSize === 16 ? "bg-slate-900 text-white" : "bg-white"
-                    }`}
-                  >
-                    🖌️ Thick
-                  </button>
-                  <button
-                    onClick={() => drawColoringTemplate(coloringTemplate)}
-                    className="px-3 py-1 rounded-xl bg-rose-100 text-rose-700 font-black text-xs cursor-pointer"
-                  >
-                    🔄 Clear
-                  </button>
-                  <button
-                    onClick={downloadColoredArtwork}
-                    className="px-4 py-1.5 rounded-xl bg-teal-400 text-slate-950 font-black text-xs shadow cursor-pointer"
-                  >
-                    💾 Save Art (+30 XP)
-                  </button>
-                </div>
-              </div>
-
-              {/* Interactive Paint Canvas */}
-              <div className="rounded-2xl overflow-hidden border-4 border-slate-900 bg-white">
-                <canvas
-                  ref={coloringCanvasRef}
-                  width={700}
-                  height={275}
-                  onMouseDown={() => setIsDrawing(true)}
-                  onMouseUp={() => setIsDrawing(false)}
-                  onMouseLeave={() => setIsDrawing(false)}
-                  onMouseMove={paintOnCanvas}
-                  className="w-full h-[230px] sm:h-[275px] cursor-crosshair block"
-                />
-              </div>
-            </div>
+            {/* PASS 07: layered coloring studio (fill, brush, eraser, undo/redo, autosave, download) */}
+            <ColoringStudio palette={COLOR_PALETTE} speakInstant={speakInstant} earnStars={earnStars} />
 
             {/* P.O.D. Size Selector */}
             <div className="flex flex-wrap items-center justify-between gap-2 bg-white px-5 py-3 rounded-2xl border-2 border-pink-300">
