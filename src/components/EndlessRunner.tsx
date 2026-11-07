@@ -1,6 +1,19 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import { getAudioContext } from "@/lib/audio";
+
+// PASS 03 — fixed world coordinates. All gameplay is authored in an 800x265 world;
+// the canvas backing store is sized to the element's real CSS size x devicePixelRatio
+// (MDN: Window.devicePixelRatio, Optimizing canvas, setTransform), and the world is
+// scaled uniformly so nothing is stretched. Extra space becomes sky (narrow screens)
+// or more track to the right (wide screens). Jump physics and speeds are unchanged.
+const WORLD_W = 800;
+const WORLD_H = 265;
+// Narrowest slice of world ever shown. Below this aspect, extra sky is added instead of
+// shrinking further, so Ella stays a readable size on phones (~1.9 s look-ahead at Groove).
+const MIN_VIEW_W = 600;
+type View = { W: number; H: number; offY: number; k: number };
 
 export type WordToken = {
   es: string;
@@ -295,14 +308,10 @@ export default function EndlessRunner({
   });
 
   const playSound = useCallback((type: "jump" | "double" | "coin" | "gameover") => {
-    if (typeof window === "undefined") return;
-    const AudioCtx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
+    const ctx = getAudioContext(); // PASS 03: shared context, no per-sound leak
+    if (!ctx) return;
 
     try {
-      const ctx = new AudioCtx();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
@@ -397,14 +406,64 @@ export default function EndlessRunner({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === "Space" || e.code === "ArrowUp") {
-        e.preventDefault();
-        triggerJump();
-      }
+      if (e.code !== "Space" && e.code !== "ArrowUp") return;
+      if (e.repeat) return; // holding the key = one jump
+      // Don't hijack typing or native button/link activation elsewhere on the page.
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(t.tagName))) return;
+      e.preventDefault();
+      triggerJump();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [triggerJump]);
+
+  // PASS 03: one jump per primary pointer press (mouse, touch, pen). MDN: Pointer Events.
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!e.isPrimary) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    triggerJump();
+  };
+
+  // PASS 03: when the tab is hidden the browser stops rAF; on return, restart the clock
+  // so the first frame has dt = 0 (no physics jump). MDN: Page Visibility API.
+  useEffect(() => {
+    const onVisibility = () => {
+      stateRef.current.lastTime = 0;
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  // PASS 03: size the backing store to CSS size x devicePixelRatio and compute the view.
+  const viewRef = useRef<View>({ W: WORLD_W, H: WORLD_H, offY: 0, k: 1 });
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const dpr = window.devicePixelRatio || 1;
+      const bw = Math.round(rect.width * dpr);
+      const bh = Math.round(rect.height * dpr);
+      if (canvas.width !== bw) canvas.width = bw; // resets context state; render sets transform every frame
+      if (canvas.height !== bh) canvas.height = bh;
+      const aspect = rect.width / rect.height;
+      // Uniform scale: show the full world height, at least MIN_VIEW_W of width; any
+      // leftover height becomes sky above the world.
+      const W = Math.max(MIN_VIEW_W, WORLD_H * aspect);
+      const H = W / aspect;
+      viewRef.current = { W, H, offY: H - WORLD_H, k: bw / W };
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+    window.addEventListener("resize", resize); // zoom / monitor changes alter devicePixelRatio
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", resize);
+    };
+  }, []);
 
   // Main 60FPS Game Loop — High-Res Chibi/Pixar Ella Bella Sprite Matching Uploaded Art!
   useEffect(() => {
@@ -443,13 +502,19 @@ export default function EndlessRunner({
       const dt = Math.min((timestamp - s.lastTime) / 1000, 0.05);
       s.lastTime = timestamp;
 
-      // 1. Background Sky
-      const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      // PASS 03: draw in world units, scaled uniformly for this screen and pixel density.
+      const view = viewRef.current;
+      const VIEW_W = view.W;
+      ctx.setTransform(view.k, 0, 0, view.k, 0, 0);
+
+      // 1. Background Sky (fills the whole visible area, including any extra sky)
+      const sky = ctx.createLinearGradient(0, 0, 0, view.H);
       sky.addColorStop(0, selectedWorld.skyTop);
       sky.addColorStop(0.55, selectedWorld.skyMid);
       sky.addColorStop(1, selectedWorld.skyBot);
       ctx.fillStyle = sky;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, view.W, view.H);
+      ctx.translate(0, view.offY); // world sits on the bottom edge
 
       // Rainbow Vertical Ribbons (From Ella Bella Jumping Art)
       const cols = [
@@ -460,14 +525,14 @@ export default function EndlessRunner({
       ];
       cols.forEach((c, idx) => {
         ctx.fillStyle = c;
-        ctx.fillRect(160 + idx * 125, 0, 125, GROUND_Y + 55);
+        ctx.fillRect(160 + idx * 125, -view.offY, 125, view.offY + GROUND_Y + 55);
       });
 
       // Floating 3D Spheres
       s.bubbles.forEach((b) => {
         if (isPlaying && !quizWord) {
           b.x -= s.speed * b.s * dt;
-          if (b.x < -40) b.x = canvas.width + 40;
+          if (b.x < -40) b.x = VIEW_W + 40;
         }
         const by = b.y + Math.sin(timestamp * 0.003 + b.x) * 5;
         ctx.beginPath();
@@ -491,9 +556,9 @@ export default function EndlessRunner({
 
       // Purple Track Floor
       ctx.fillStyle = selectedWorld.floorColor;
-      ctx.fillRect(0, GROUND_Y + 50, canvas.width, 70);
+      ctx.fillRect(0, GROUND_Y + 50, VIEW_W, 70);
       ctx.fillStyle = "#22d3ee";
-      ctx.fillRect(0, GROUND_Y + 50, canvas.width, 6);
+      ctx.fillRect(0, GROUND_Y + 50, VIEW_W, 6);
 
       for (let i = 0; i < 12; i++) {
         const sx = ((i * 90 - ((s.distance * 0.9) % 1080) + 1080) % 1080) - 60;
@@ -524,7 +589,7 @@ export default function EndlessRunner({
         // Obstacle Movement
         s.obstacleX -= s.speed * dt;
         if (s.obstacleX < -70) {
-          s.obstacleX = canvas.width + 180 + Math.random() * 240;
+          s.obstacleX = WORLD_W + 180 + Math.random() * 240;
           s.currentScore += 15;
           setScore(s.currentScore);
           onEarnStars(5);
@@ -537,7 +602,7 @@ export default function EndlessRunner({
         // Bilingual Word Token Movement
         s.tokenX -= s.speed * 0.92 * dt;
         if (s.tokenX < -90) {
-          s.tokenX = canvas.width + 140 + Math.random() * 180;
+          s.tokenX = WORLD_W + 140 + Math.random() * 180;
           s.tokenY = 90 + Math.random() * 55;
           s.tokenIndex = (s.tokenIndex + 1) % WORD_BANK.length;
         }
@@ -561,7 +626,7 @@ export default function EndlessRunner({
             setQuizWord(w);
           }
 
-          s.tokenX = canvas.width + 220;
+          s.tokenX = WORLD_W + 220;
           s.tokenY = 90 + Math.random() * 55;
           s.tokenIndex = (s.tokenIndex + 1) % WORD_BANK.length;
         }
@@ -1012,14 +1077,16 @@ export default function EndlessRunner({
       </div>
 
       {/* Interactive Game Stage */}
-      <div
-        onClick={triggerJump}
-        className="relative rounded-[2rem] overflow-hidden border-8 border-cyan-400 shadow-[0_10px_0_#0284c7] cursor-pointer select-none bg-sky-300"
-      >
+      <div className="relative rounded-[2rem] overflow-hidden border-8 border-cyan-400 shadow-[0_10px_0_#0284c7] cursor-pointer select-none bg-sky-300">
+        {/* PASS 03: pointerdown on the canvas only; touch-action limited to the game surface. */}
         <canvas
           ref={canvasRef}
-          width={800}
-          height={265}
+          width={WORLD_W}
+          height={WORLD_H}
+          onPointerDown={handlePointerDown}
+          style={{ touchAction: "none" }}
+          aria-label="Ella Bella runner game. Tap or press Space to jump."
+          role="img"
           className="w-full h-[245px] sm:h-[285px] block"
         />
 
@@ -1033,7 +1100,7 @@ export default function EndlessRunner({
               🌟 5-Word Streak Bonus Quiz! (+100 Stars)
             </span>
             <h3 className="text-2xl sm:text-3xl font-black text-white">
-              What does <span className="text-yellow-300">{quizWord.es}</span> mean in English?
+              What does <span lang="es" className="text-yellow-300">{quizWord.es}</span> mean in English?
             </h3>
             <div className="flex flex-wrap justify-center gap-3">
               {WORD_BANK.slice(0, 3).map((option) => {
@@ -1066,7 +1133,12 @@ export default function EndlessRunner({
 
         {/* Start / Game Over Overlay */}
         {!isPlaying && !quizWord && (
-          <div className="absolute inset-0 bg-indigo-950/50 backdrop-blur-[2px] flex flex-col items-center justify-center p-4 text-center space-y-4">
+          // PASS 03: tapping anywhere on this screen starts a run (as before, when the click
+          // bubbled to the stage). Its buttons stop propagation, so no double start.
+          <div
+            onClick={triggerJump}
+            className="absolute inset-0 bg-indigo-950/50 backdrop-blur-[2px] flex flex-col items-center justify-center p-4 text-center space-y-4"
+          >
             <h3 className="text-3xl sm:text-5xl font-black text-yellow-300 drop-shadow-[0_4px_0_#991b1b]">
               {gameOver ? `¡Brava! Score: ${score} ⭐` : "¡Vamos a Correr!"}
             </h3>

@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import EndlessRunner, { WORD_BANK, isSafeImageDataUrl } from "@/components/EndlessRunner";
+import { getAudioContext, unlockAudio } from "@/lib/audio";
 
 type KidTab = "play" | "words" | "shop" | "watch";
 
@@ -310,6 +311,18 @@ export default function EllaBellaPlatform() {
     }
   }, []);
 
+  // PASS 03: unlock/resume the shared AudioContext on real user gestures. Kept for the
+  // page's lifetime (not once) because iOS Safari can interrupt audio again later.
+  useEffect(() => {
+    const onGesture = () => unlockAudio();
+    window.addEventListener("pointerdown", onGesture, { capture: true, passive: true });
+    window.addEventListener("keydown", onGesture, { capture: true });
+    return () => {
+      window.removeEventListener("pointerdown", onGesture, { capture: true });
+      window.removeEventListener("keydown", onGesture, { capture: true });
+    };
+  }, []);
+
   const earnStars = useCallback((pts: number) => {
     setXpStars((prev) => {
       const next = prev + pts;
@@ -328,11 +341,8 @@ export default function EllaBellaPlatform() {
       if (typeof window === "undefined") return;
 
       try {
-        const AudioCtx =
-          window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        if (AudioCtx) {
-          const ctx = new AudioCtx();
+        const ctx = getAudioContext(); // PASS 03: shared context, no per-call leak
+        if (ctx) {
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.connect(gain);
@@ -517,14 +527,10 @@ export default function EllaBellaPlatform() {
 
   // Web Audio API Synthesized Hip-Hop Drum Machine for Beat Lab & Sing-Along TV
   const playDrumHit = useCallback((drum: "kick" | "snare" | "hat" | "bass") => {
-    if (typeof window === "undefined") return;
-    const AudioCtx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
+    const ctx = getAudioContext(); // PASS 03: shared context, no per-hit leak
+    if (!ctx) return;
 
     try {
-      const ctx = new AudioCtx();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
@@ -817,7 +823,7 @@ export default function EllaBellaPlatform() {
                     className={`rounded-3xl p-3.5 bg-gradient-to-b ${btn.bg} text-white border-3 border-white flex flex-col items-center text-center gap-0.5 hover:scale-105 active:translate-y-1 transition cursor-pointer`}
                   >
                     <span className="text-2xl sm:text-3xl">{btn.emoji}</span>
-                    <span className="font-black text-sm sm:text-base">{btn.es}</span>
+                    <span lang="es" className="font-black text-sm sm:text-base">{btn.es}</span>
                     <span className="text-xs font-bold text-yellow-100">
                       🔊 {btn.en}
                     </span>
@@ -855,7 +861,7 @@ export default function EllaBellaPlatform() {
                     }}
                     className="px-5 py-3 rounded-full bg-yellow-300 hover:bg-yellow-200 text-slate-950 font-black text-sm border-3 border-white shadow cursor-pointer"
                   >
-                    🔊 Hear Mystery Word ({quizTarget.es})
+                    🔊 Hear Mystery Word (<span lang="es">{quizTarget.es}</span>)
                   </button>
                   <button
                     onClick={() => startMicPractice(quizTarget.es)}
@@ -907,7 +913,7 @@ export default function EllaBellaPlatform() {
                         {card.category} • {card.phonetic}
                       </span>
                       <h3 className="text-2xl sm:text-3xl font-black mt-1">
-                        {card.emoji} {card.es}
+                        {card.emoji} <span lang="es">{card.es}</span>
                       </h3>
                       <p className="text-base font-bold text-yellow-100">
                         English: {card.en}
@@ -936,7 +942,7 @@ export default function EllaBellaPlatform() {
 
                   <div className="bg-black/20 p-3 rounded-2xl text-xs space-y-1">
                     <div>
-                      <strong>🇪🇸 Phrase:</strong> &ldquo;{card.sentenceEs}&rdquo;
+                      <strong>🇪🇸 Phrase:</strong> &ldquo;<span lang="es">{card.sentenceEs}</span>&rdquo;
                     </div>
                     <div>
                       <strong>🇺🇸 Meaning:</strong> &ldquo;{card.sentenceEn}&rdquo;
@@ -1204,7 +1210,7 @@ export default function EllaBellaPlatform() {
                           : "bg-white/10 text-white hover:bg-white/20"
                       }`}
                     >
-                      <span className="text-base sm:text-lg font-black">
+                      <span lang="es" className="text-base sm:text-lg font-black">
                         {line.es}
                       </span>
                       <span
