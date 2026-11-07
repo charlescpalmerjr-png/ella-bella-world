@@ -114,7 +114,7 @@ export function speakSegments(segments: SpeechSegment[], onDone?: () => void): b
     const v = pickVoice(voices, part.lang);
     if (v) u.voice = v;
     u.rate = part.lang === "es-US" ? 0.9 : 0.95; // a little slower: clear for young learners
-    u.pitch = 1.1;
+    u.pitch = 1.35; // PASS 04.1: younger-sounding (browser max is 2)
     if (i === parts.length - 1) u.onend = done;
     u.onerror = done;
     synth.speak(u); // utterances queue and play in order
