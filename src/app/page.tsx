@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import EndlessRunner, { WORD_BANK, isSafeImageDataUrl } from "@/components/EndlessRunner";
 import { getAudioContext, unlockAudio } from "@/lib/audio";
+import { initSpeech, speakSegments, type SpeechLang, type SpeechSegment } from "@/lib/speech";
 
 type KidTab = "play" | "words" | "shop" | "watch";
 
@@ -281,8 +282,7 @@ export default function EllaBellaPlatform() {
   const [coverError, setCoverError] = useState(false);
   const [speakingText, setSpeakingText] = useState<string | null>(null);
 
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
+  const speechSeqRef = useRef(0); // only the latest speech may clear the caption
 
   // Restore on-device preferences. PASS 02: images are no longer uploaded to the server,
   // and Pro access is no longer granted from a browser flag (server entitlements come in PASS 07).
@@ -302,13 +302,7 @@ export default function EllaBellaPlatform() {
       // Ignore
     }
 
-    if ("speechSynthesis" in window) {
-      const loadVoices = () => {
-        voicesRef.current = window.speechSynthesis.getVoices();
-      };
-      loadVoices();
-      window.speechSynthesis.onvoiceschanged = loadVoices;
-    }
+    initSpeech(); // PASS 04: load voices early so the first tap uses the right one
   }, []);
 
   // PASS 03: unlock/resume the shared AudioContext on real user gestures. Kept for the
@@ -337,8 +331,11 @@ export default function EllaBellaPlatform() {
 
   // Zero-Delay Instant Local Voice Engine
   const speakInstant = useCallback(
-    (text: string, lang: "en-US" | "es-US" = "en-US") => {
+    // PASS 04: accepts plain text (one language) or segments, each spoken in its own voice.
+    (input: string | SpeechSegment[], lang: SpeechLang = "en-US") => {
       if (typeof window === "undefined") return;
+      const segments: SpeechSegment[] = typeof input === "string" ? [{ text: input, lang }] : input;
+      const text = segments.map((seg) => seg.text).join(" ");
 
       try {
         const ctx = getAudioContext(); // PASS 03: shared context, no per-call leak
@@ -348,7 +345,7 @@ export default function EllaBellaPlatform() {
           osc.connect(gain);
           gain.connect(ctx.destination);
           osc.type = "triangle";
-          osc.frequency.setValueAtTime(lang === "es-US" ? 587.33 : 523.25, ctx.currentTime);
+          osc.frequency.setValueAtTime(segments[0]?.lang === "es-US" ? 587.33 : 523.25, ctx.currentTime);
           osc.frequency.exponentialRampToValueAtTime(783.99, ctx.currentTime + 0.08);
           gain.gain.setValueAtTime(0.1, ctx.currentTime);
           gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.09);
@@ -361,28 +358,11 @@ export default function EllaBellaPlatform() {
 
       setSpeakingText(text);
 
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-        const utter = new SpeechSynthesisUtterance(text);
-        utteranceRef.current = utter;
-        utter.lang = lang;
-        utter.rate = 1.04;
-        utter.pitch = 1.15;
-
-        const voices =
-          voicesRef.current.length > 0
-            ? voicesRef.current
-            : window.speechSynthesis.getVoices();
-        const prefix = lang.slice(0, 2);
-        const localVoice =
-          voices.find((v) => v.lang.startsWith(prefix) && v.localService) ||
-          voices.find((v) => v.lang.startsWith(prefix));
-        if (localVoice) utter.voice = localVoice;
-
-        utter.onend = () => setSpeakingText(null);
-        utter.onerror = () => setSpeakingText(null);
-        window.speechSynthesis.speak(utter);
-      }
+      const seq = ++speechSeqRef.current;
+      const started = speakSegments(segments, () => {
+        if (speechSeqRef.current === seq) setSpeakingText(null);
+      });
+      if (!started) setSpeakingText(null);
     },
     []
   );
@@ -414,7 +394,7 @@ export default function EllaBellaPlatform() {
         const transcript = event.results[0][0].transcript;
         earnStars(50);
         setMicStatus(`🌟 You said: "${transcript}" — ¡Increíble! (+50 Stars!)`);
-        speakInstant(`¡Brava! You said ${transcript}!`, "es-US");
+        speakInstant([{ text: "¡Brava!", lang: "es-US" }, { text: "You said", lang: "en-US" }, { text: `${transcript}!`, lang: "es-US" }]);
       };
       recognition.onerror = () => {
         earnStars(25);
@@ -522,7 +502,7 @@ export default function EllaBellaPlatform() {
     link.href = canvas.toDataURL("image/png");
     link.click();
     earnStars(30);
-    speakInstant("¡Obra de arte guardada! Artwork saved!", "es-US");
+    speakInstant([{ text: "¡Obra de arte guardada!", lang: "es-US" }, { text: "Artwork saved!", lang: "en-US" }]);
   };
 
   // Web Audio API Synthesized Hip-Hop Drum Machine for Beat Lab & Sing-Along TV
@@ -675,10 +655,10 @@ export default function EllaBellaPlatform() {
 
             <button
               onClick={() =>
-                speakInstant(
-                  "¡Hola amigos! Tap Play, Learn, Color, or Beat Lab to explore with me!",
-                  "en-US"
-                )
+                speakInstant([
+                  { text: "¡Hola amigos!", lang: "es-US" },
+                  { text: "Tap Play, Learn, Color, or Beat Lab to explore with me!", lang: "en-US" },
+                ])
               }
               className="px-4 py-2 rounded-full bg-gradient-to-b from-teal-300 to-teal-500 text-slate-950 font-black text-xs sm:text-sm border-3 border-white shadow-[0_3px_0_#0f766e] active:translate-y-0.5 cursor-pointer"
             >
@@ -719,10 +699,10 @@ export default function EllaBellaPlatform() {
               <div className="absolute bottom-3 right-4 flex gap-2">
                 <button
                   onClick={() =>
-                    speakInstant(
-                      "¡Hola! Soy Ella Bella! Let's run, sing, and learn Spanish and English!",
-                      "es-US"
-                    )
+                    speakInstant([
+                      { text: "¡Hola! ¡Soy Ella Bella!", lang: "es-US" },
+                      { text: "Let's run, sing, and learn Spanish and English!", lang: "en-US" },
+                    ])
                   }
                   className="px-4 py-2 rounded-full bg-white/95 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm border-3 border-pink-500 shadow-lg cursor-pointer"
                 >
@@ -817,7 +797,7 @@ export default function EllaBellaPlatform() {
                     key={btn.id}
                     onClick={() => {
                       earnStars(5);
-                      speakInstant(`${btn.es}. ${btn.en}`, "es-US");
+                      speakInstant([{ text: btn.es, lang: "es-US" }, { text: btn.en, lang: "en-US" }]);
                     }}
                     style={{ boxShadow: `0 5px 0 ${btn.shadow}` }}
                     className={`rounded-3xl p-3.5 bg-gradient-to-b ${btn.bg} text-white border-3 border-white flex flex-col items-center text-center gap-0.5 hover:scale-105 active:translate-y-1 transition cursor-pointer`}
@@ -926,12 +906,12 @@ export default function EllaBellaPlatform() {
                           setQuizFeedback(
                             `🎉 ¡CORRECTO! ${card.es} means ${card.en}! (+35 Stars!)`
                           );
-                          speakInstant(`¡Correcto! ${card.es} is ${card.en}!`, "en-US");
+                          speakInstant([{ text: `¡Correcto! ${card.es}`, lang: "es-US" }, { text: `means ${card.en}!`, lang: "en-US" }]);
                         } else {
                           setQuizFeedback(
                             `Try again! That was ${card.es}. Find "${quizTarget.es}"!`
                           );
-                          speakInstant(`That is ${card.es}. Try again!`, "en-US");
+                          speakInstant([{ text: "That is", lang: "en-US" }, { text: card.es, lang: "es-US" }, { text: "Try again!", lang: "en-US" }]);
                         }
                       }}
                       className="px-3.5 py-2 rounded-2xl bg-yellow-300 hover:bg-yellow-200 text-slate-950 font-black text-xs shadow cursor-pointer shrink-0"
@@ -1202,7 +1182,7 @@ export default function EllaBellaPlatform() {
                       key={line.es}
                       onClick={() => {
                         setActiveLyricLine(idx);
-                        speakInstant(`${line.es}. ${line.en}`, "es-US");
+                        speakInstant([{ text: line.es, lang: "es-US" }, { text: line.en, lang: "en-US" }]);
                       }}
                       className={`p-3 rounded-2xl transition cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-1 ${
                         active
@@ -1246,7 +1226,7 @@ export default function EllaBellaPlatform() {
                         if (opt === activeEpisode.answer) {
                           earnStars(40);
                           setEpQuizFeedback("🎉 ¡Exacto! You earned +40 XP Stars!");
-                          speakInstant(`¡Correcto! ${opt}!`, "en-US");
+                          speakInstant([{ text: "¡Correcto!", lang: "es-US" }, { text: `${opt}!`, lang: "en-US" }]);
                         } else {
                           setEpQuizFeedback("Try again! Listen closely to Ella's lyrics!");
                         }

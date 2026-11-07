@@ -2,6 +2,8 @@
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { getAudioContext } from "@/lib/audio";
+import type { SpeechLang, SpeechSegment } from "@/lib/speech";
+import { buildQuizOptions, createWordBag } from "@/lib/words";
 
 // PASS 03 — fixed world coordinates. All gameplay is authored in an 800x265 world;
 // the canvas backing store is sized to the element's real CSS size x devicePixelRatio
@@ -65,6 +67,42 @@ export const WORD_BANK: WordToken[] = [
     emoji: "🎧",
     color: "#f43f5e",
     fact: "Salsa, Reggaeton, and Hip-Hop share West African and Caribbean drum rhythms!",
+  },
+  // PASS 04: the lesson words, so the runner practices the same vocabulary as Learn & Quiz.
+  {
+    es: "¡Hola Amigos!",
+    en: "Hello Friends",
+    emoji: "👋🏽",
+    color: "#ec4899",
+    fact: "Amigo is a boy friend, amiga is a girl friend, and amigos means friends!",
+  },
+  {
+    es: "¡El Baile!",
+    en: "The Dance",
+    emoji: "💃🏽",
+    color: "#10b981",
+    fact: "El baile means the dance, and bailar means to dance!",
+  },
+  {
+    es: "¡El Libro!",
+    en: "The Book",
+    emoji: "📚",
+    color: "#3b82f6",
+    fact: "Libro means book, and a librería is a bookstore!",
+  },
+  {
+    es: "¡Uno, Dos, Tres!",
+    en: "One, Two, Three",
+    emoji: "🔢",
+    color: "#f43f5e",
+    fact: "Uno, dos, tres means one, two, three. Count your jumps in Spanish!",
+  },
+  {
+    es: "¡El Corazón!",
+    en: "The Heart",
+    emoji: "💖",
+    color: "#a855f7",
+    fact: "Con todo el corazón means with all your heart!",
   },
 ];
 
@@ -214,7 +252,7 @@ type Particle = {
 type Props = {
   isProUnlocked: boolean;
   onUnlockPro: () => void;
-  speakInstant: (text: string, lang?: "en-US" | "es-US") => void;
+  speakInstant: (input: string | SpeechSegment[], lang?: SpeechLang) => void;
   spriteSrc: string | null;
   onEarnStars: (pts: number) => void;
 };
@@ -240,6 +278,8 @@ export default function EndlessRunner({
   const [streak, setStreak] = useState(0);
   const [popWord, setPopWord] = useState<string>("Tap Screen or Press SPACE to Jump!");
   const [quizWord, setQuizWord] = useState<WordToken | null>(null);
+  const [quizOptions, setQuizOptions] = useState<WordToken[]>([]);
+  const wordBagRef = useRef(createWordBag(WORD_BANK.length)); // PASS 04: no repeats until all seen
 
   useEffect(() => {
     const stored =
@@ -279,7 +319,7 @@ export default function EndlessRunner({
       // Storage full: the sprite still works for this visit, it just won't be remembered.
     }
     // PASS 02: the photo stays on this device only; it is never sent to the server.
-    speakInstant("¡Lista! Photo sprite loaded and facing forward!", "es-US");
+    speakInstant([{ text: "¡Lista!", lang: "es-US" }, { text: "Photo sprite loaded!", lang: "en-US" }]);
   };
 
   const stateRef = useRef({
@@ -604,7 +644,7 @@ export default function EndlessRunner({
         if (s.tokenX < -90) {
           s.tokenX = WORLD_W + 140 + Math.random() * 180;
           s.tokenY = 90 + Math.random() * 55;
-          s.tokenIndex = (s.tokenIndex + 1) % WORD_BANK.length;
+          s.tokenIndex = wordBagRef.current();
         }
 
         // Word Token Catch
@@ -619,16 +659,17 @@ export default function EndlessRunner({
           onEarnStars(25);
           setPopWord(`${w.emoji} ${w.es} = ${w.en} (+50!)`);
           playSound("coin");
-          speakInstant(`${w.es}. ${w.en}`, "es-US");
+          speakInstant([{ text: w.es, lang: "es-US" }, { text: w.en, lang: "en-US" }]);
           spawnBurst(s.tokenX, s.tokenY, w.color);
 
           if (s.currentStreak > 0 && s.currentStreak % 5 === 0) {
+            setQuizOptions(buildQuizOptions(w, WORD_BANK)); // PASS 04: correct answer always offered
             setQuizWord(w);
           }
 
           s.tokenX = WORLD_W + 220;
           s.tokenY = 90 + Math.random() * 55;
-          s.tokenIndex = (s.tokenIndex + 1) % WORD_BANK.length;
+          s.tokenIndex = wordBagRef.current();
         }
 
         // Forgiving Obstacle Hitbox
@@ -640,7 +681,7 @@ export default function EndlessRunner({
           setIsPlaying(false);
           setGameOver(true);
           setHighScore((prev) => Math.max(prev, s.currentScore));
-          speakInstant("¡Buen intento! Tap to run again!", "en-US");
+          speakInstant([{ text: "¡Buen intento!", lang: "es-US" }, { text: "Tap to run again!", lang: "en-US" }]);
         }
       } else {
         s.runCycle += dt * 3.5;
@@ -1103,7 +1144,7 @@ export default function EndlessRunner({
               What does <span lang="es" className="text-yellow-300">{quizWord.es}</span> mean in English?
             </h3>
             <div className="flex flex-wrap justify-center gap-3">
-              {WORD_BANK.slice(0, 3).map((option) => {
+              {quizOptions.map((option) => {
                 const isWinner = option.es === quizWord.es;
                 return (
                   <button
@@ -1114,9 +1155,9 @@ export default function EndlessRunner({
                         setScore(stateRef.current.currentScore);
                         onEarnStars(100);
                         playSound("coin");
-                        speakInstant(`¡Correcto! ${quizWord.es} means ${quizWord.en}!`, "en-US");
+                        speakInstant([{ text: `¡Correcto! ${quizWord.es}`, lang: "es-US" }, { text: `means ${quizWord.en}!`, lang: "en-US" }]);
                       } else {
-                        speakInstant(`Close! ${quizWord.es} means ${quizWord.en}!`, "en-US");
+                        speakInstant([{ text: "Close!", lang: "en-US" }, { text: quizWord.es, lang: "es-US" }, { text: `means ${quizWord.en}!`, lang: "en-US" }]);
                       }
                       setQuizWord(null);
                       stateRef.current.lastTime = performance.now();
