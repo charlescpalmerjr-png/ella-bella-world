@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import EndlessRunner, { WORD_BANK, isSafeImageDataUrl } from "@/components/EndlessRunner";
 import { getAudioContext, unlockAudio } from "@/lib/audio";
 import { initSpeech, speakSegments, type SpeechLang, type SpeechSegment } from "@/lib/speech";
+import { judgePronunciation } from "@/lib/pronunciation";
 
 type KidTab = "play" | "words" | "shop" | "watch";
 
@@ -92,7 +93,7 @@ const CURRICULUM: VocabLesson[] = [
     phonetic: "ehl BY-leh",
     sentenceEs: "¡El baile une a toda la familia!",
     sentenceEn: "Dance brings the whole family together!",
-    fact: "Breakdancing (Breaking) became an official Olympic sport and blends acrobatics with salsa footwork!",
+    fact: "Breaking (breakdancing) was born in the Bronx and made its Olympic debut at the 2024 Paris Games!",
     bg: "from-emerald-400 to-teal-600",
     shadow: "#065f46",
   },
@@ -131,7 +132,7 @@ const CURRICULUM: VocabLesson[] = [
     phonetic: "ehl koh-rah-SOHN",
     sentenceEs: "Canta con todo el corazón.",
     sentenceEn: "Sing with all your heart.",
-    fact: "Music beats at 60 to 120 beats per minute—the exact same rhythm as a human heart!",
+    fact: "In Spanish, \"con todo el corazón\" means \"with all your heart\": sing it loud!",
     bg: "from-fuchsia-500 to-purple-600",
     shadow: "#581c87",
   },
@@ -368,6 +369,8 @@ export default function EllaBellaPlatform() {
   );
 
   // Official MDN Web Speech Recognition API (Microphone Pronunciation Practice!)
+  // PASS 05: honest pronunciation practice. Stars and praise only when what the recognizer
+  // heard actually matches the phrase (MDN: SpeechRecognition, maxAlternatives, onerror).
   const startMicPractice = (targetEs: string) => {
     if (typeof window === "undefined") return;
     const SpeechRec =
@@ -376,9 +379,8 @@ export default function EllaBellaPlatform() {
       (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
 
     if (!SpeechRec) {
-      setMicStatus("🎤 Listening! Great job saying: " + targetEs + " (+50 Stars!)");
-      earnStars(50);
-      speakInstant(`¡Excelente pronunciación! ${targetEs}`, "es-US");
+      setMicStatus(`🔊 Mic practice isn't available in this browser. Listen, then say "${targetEs}" out loud!`);
+      speakInstant(targetEs, "es-US");
       return;
     }
 
@@ -387,23 +389,40 @@ export default function EllaBellaPlatform() {
       const recognition = new (SpeechRec as any)();
       recognition.lang = "es-US";
       recognition.interimResults = false;
+      recognition.maxAlternatives = 3;
       setMicStatus("🎙️ Listening now... Say '" + targetEs + "' into your microphone!");
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        earnStars(50);
-        setMicStatus(`🌟 You said: "${transcript}" — ¡Increíble! (+50 Stars!)`);
-        speakInstant([{ text: "¡Brava!", lang: "es-US" }, { text: "You said", lang: "en-US" }, { text: `${transcript}!`, lang: "es-US" }]);
+        const alts: string[] = Array.from(event.results[0] as ArrayLike<{ transcript: string }>).map((a) => a.transcript);
+        const { verdict, heard } = judgePronunciation(alts, targetEs);
+        if (verdict === "match") {
+          earnStars(50);
+          setMicStatus(`🌟 ¡Excelente! You said "${heard}" (+50 Stars!)`);
+          speakInstant([{ text: "¡Excelente!", lang: "es-US" }, { text: targetEs, lang: "es-US" }]);
+        } else if (verdict === "close") {
+          earnStars(10);
+          setMicStatus(`👏🏽 So close! I heard "${heard}". Listen and try "${targetEs}" again (+10 Stars)`);
+          speakInstant([{ text: "So close! Listen:", lang: "en-US" }, { text: targetEs, lang: "es-US" }]);
+        } else {
+          setMicStatus(`🔁 I heard "${heard}". Let's try again: "${targetEs}"`);
+          speakInstant([{ text: "Let's try again. Listen:", lang: "en-US" }, { text: targetEs, lang: "es-US" }]);
+        }
       };
-      recognition.onerror = () => {
-        earnStars(25);
-        setMicStatus(`👏🏽 Great effort practicing "${targetEs}"! (+25 Stars!)`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recognition.onerror = (event: any) => {
+        const code = event?.error;
+        if (code === "not-allowed" || code === "service-not-allowed") {
+          setMicStatus("🎤 The microphone is blocked. Ask a grown-up to allow it in the browser settings.");
+        } else if (code === "no-speech") {
+          setMicStatus(`🤫 I didn't hear anything. Tap the mic and say "${targetEs}"!`);
+        } else {
+          setMicStatus(`🎤 The mic didn't work that time. Tap to try "${targetEs}" again.`);
+        }
       };
       recognition.start();
     } catch {
-      earnStars(25);
-      setMicStatus(`👏🏽 Great practice saying "${targetEs}"!`);
+      setMicStatus(`🎤 The mic couldn't start. Tap to try "${targetEs}" again.`);
     }
   };
 

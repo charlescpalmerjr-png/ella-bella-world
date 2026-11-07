@@ -690,11 +690,15 @@ export default function EndlessRunner({
       // 3. Draw Floating Bilingual Word Pill
       const token = WORD_BANK[s.tokenIndex];
       const bobY = s.tokenY + Math.sin(timestamp * 0.005) * 6;
-      drawPill(s.tokenX - 56, bobY - 20, 112, 40, 20, token.color, "#fef08a");
+      // PASS 05: size the bubble to its text so longer words fit.
+      ctx.font = "900 14px sans-serif";
+      const tokenLabel = `${token.emoji} ${token.es}`;
+      const pillW = Math.max(112, Math.ceil(ctx.measureText(tokenLabel).width) + 32);
+      drawPill(s.tokenX - pillW / 2, bobY - 20, pillW, 40, 20, token.color, "#fef08a");
       ctx.fillStyle = "#ffffff";
       ctx.font = "900 14px sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(`${token.emoji} ${token.es}`, s.tokenX, bobY + 5);
+      ctx.fillText(tokenLabel, s.tokenX, bobY + 5);
 
       // 4. Draw Hip-Hop Boombox Obstacle
       const obsY = GROUND_Y + 50 - 44;
@@ -1128,22 +1132,22 @@ export default function EndlessRunner({
           style={{ touchAction: "none" }}
           aria-label="Ella Bella runner game. Tap or press Space to jump."
           role="img"
-          className="w-full h-[245px] sm:h-[285px] block"
+          className="w-full h-[280px] sm:h-[285px] block"
         />
 
         {/* In-Game Bilingual Checkpoint Pop-Quiz (Every 5 Words Caught!) */}
         {quizWord && (
           <div
             onClick={(e) => e.stopPropagation()}
-            className="absolute inset-0 bg-indigo-950/85 backdrop-blur-xs flex flex-col items-center justify-center p-4 text-center space-y-3"
+            className="absolute inset-0 bg-indigo-950/85 backdrop-blur-xs flex flex-col items-center justify-center p-3 sm:p-4 text-center gap-2 sm:gap-3 overflow-y-auto"
           >
-            <span className="px-3 py-1 rounded-full bg-yellow-300 text-slate-950 font-black text-xs uppercase">
+            <span className="px-3 py-1 rounded-full bg-yellow-300 text-slate-950 font-black text-[10px] sm:text-xs uppercase">
               🌟 5-Word Streak Bonus Quiz! (+100 Stars)
             </span>
-            <h3 className="text-2xl sm:text-3xl font-black text-white">
+            <h3 className="text-lg sm:text-3xl leading-tight font-black text-white">
               What does <span lang="es" className="text-yellow-300">{quizWord.es}</span> mean in English?
             </h3>
-            <div className="flex flex-wrap justify-center gap-3">
+            <div className="grid grid-cols-1 w-full max-w-xs gap-2 sm:flex sm:flex-wrap sm:justify-center sm:max-w-none sm:gap-3">
               {quizOptions.map((option) => {
                 const isWinner = option.es === quizWord.es;
                 return (
@@ -1162,7 +1166,7 @@ export default function EndlessRunner({
                       setQuizWord(null);
                       stateRef.current.lastTime = performance.now();
                     }}
-                    className="px-5 py-3 rounded-2xl bg-white hover:bg-teal-300 text-slate-900 font-black text-base border-4 border-pink-400 shadow cursor-pointer"
+                    className="px-4 py-2 sm:px-5 sm:py-3 rounded-2xl bg-white hover:bg-teal-300 text-slate-900 font-black text-sm sm:text-base border-2 sm:border-4 border-pink-400 shadow cursor-pointer"
                   >
                     {option.emoji} {option.en}
                   </button>
@@ -1213,6 +1217,22 @@ export default function EndlessRunner({
           </div>
         )}
       </div>
+
+      {/* PASS 05: thumb-zone JUMP button below the stage on touch screens, so the thumb
+          never covers the obstacles. Tapping the game itself still works too. */}
+      <button
+        type="button"
+        onPointerDown={(e) => {
+          if (!e.isPrimary) return;
+          e.preventDefault();
+          triggerJump();
+        }}
+        disabled={!!quizWord}
+        style={{ touchAction: "none" }}
+        className="hidden pointer-coarse:flex w-full items-center justify-center gap-2 py-5 rounded-[2rem] bg-gradient-to-b from-teal-300 to-teal-500 text-slate-950 font-black text-2xl border-4 border-white shadow-[0_6px_0_#0f766e] active:translate-y-1 select-none disabled:opacity-50"
+      >
+        {isPlaying ? "⬆️ JUMP" : gameOver ? "🔄 PLAY AGAIN" : "▶️ START"}
+      </button>
     </div>
   );
 }
