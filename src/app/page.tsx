@@ -275,7 +275,8 @@ export default function EllaBellaPlatform() {
 
   // Permanent Cover & Sprite Sources
   const [coverSrc, setCoverSrc] = useState<string>("/ella-cover.jpg");
-  const [spriteSrc, setSpriteSrc] = useState<string>("/ella-sprite.jpg");
+  // Custom photo sprite (on-device only). null = none uploaded; the runner uses the drawn Ella rig.
+  const [spriteSrc, setSpriteSrc] = useState<string | null>(null);
   const [coverError, setCoverError] = useState(false);
   const [speakingText, setSpeakingText] = useState<string | null>(null);
 
@@ -641,7 +642,9 @@ export default function EllaBellaPlatform() {
               className="w-12 h-12 rounded-full overflow-hidden border-3 border-cyan-400 shadow-[0_3px_0_#0284c7] bg-gradient-to-b from-teal-300 to-pink-500 flex items-center justify-center text-2xl cursor-pointer"
             >
               <img
-                src={spriteSrc}
+                src={spriteSrc ?? "/ella-avatar.webp"}
+                width={48}
+                height={48}
                 alt="Ella Bella"
                 className="w-full h-full object-cover"
                 onError={(e) => {

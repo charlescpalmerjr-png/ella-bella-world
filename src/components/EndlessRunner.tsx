@@ -202,7 +202,7 @@ type Props = {
   isProUnlocked: boolean;
   onUnlockPro: () => void;
   speakInstant: (text: string, lang?: "en-US" | "es-US") => void;
-  spriteSrc: string;
+  spriteSrc: string | null;
   onEarnStars: (pts: number) => void;
 };
 
@@ -233,6 +233,7 @@ export default function EndlessRunner({
       typeof window !== "undefined" ? localStorage.getItem("ella_sprite_img") : null;
     const savedCustomSprite = isSafeImageDataUrl(stored) ? stored : null;
     const activeSrc = savedCustomSprite || spriteSrc;
+    if (!activeSrc) return; // no photo sprite: the drawn Ella rig is the default character
 
     const img = new Image();
     img.crossOrigin = "anonymous";
