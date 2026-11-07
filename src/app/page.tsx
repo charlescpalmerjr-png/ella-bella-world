@@ -535,14 +535,16 @@ export default function EllaBellaPlatform() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-rose-200 via-sky-100 to-amber-100 text-slate-900 font-sans pb-20">
       {/* PERMANENT STICKY NAVIGATION HEADER */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b-4 border-pink-400 px-4 py-2.5 shadow-sm">
-        <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b-4 border-pink-400 px-3 sm:px-4 py-2 sm:py-2.5 shadow-sm">
+        {/* PASS 08.1: one compact row on phones (icon buttons), full labels from sm: up */}
+        <div className="max-w-5xl mx-auto flex flex-nowrap sm:flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={() =>
                 speakInstant("¡Hola! Soy Ella Bella de Nueva Jersey!", "es-US")
               }
-              className="w-12 h-12 rounded-full overflow-hidden border-3 border-cyan-400 shadow-[0_3px_0_#0284c7] bg-gradient-to-b from-teal-300 to-pink-500 flex items-center justify-center text-2xl cursor-pointer"
+              aria-label="Hear Ella Bella say hello"
+              className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-full overflow-hidden border-3 border-cyan-400 shadow-[0_3px_0_#0284c7] bg-gradient-to-b from-teal-300 to-pink-500 flex items-center justify-center text-2xl cursor-pointer"
             >
               <img
                 src={spriteSrc ?? "/ella-avatar.webp"}
@@ -556,18 +558,18 @@ export default function EllaBellaPlatform() {
               />
             </button>
             <div>
-              <span className="block text-2xl sm:text-3xl font-black tracking-tight text-red-600 drop-shadow-[0_3px_0_#2563eb] leading-none">
+              <span className="hidden sm:block text-3xl font-black tracking-tight text-red-600 drop-shadow-[0_3px_0_#2563eb] leading-none whitespace-nowrap">
                 ELLA BELLA
               </span>
-              <span className="inline-block mt-0.5 px-2.5 py-0.5 rounded-full bg-pink-500 text-white font-black text-[11px] uppercase">
+              <span className="hidden sm:inline-block mt-0.5 px-2.5 py-0.5 rounded-full bg-pink-500 text-white font-black text-[11px] uppercase">
                 {isProUnlocked ? "👑 VIP PRO PASS ACTIVE" : "🎤 Bilingual Edutainment"}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="px-3.5 py-1.5 rounded-full bg-yellow-200 border-2 border-amber-500 font-black text-xs sm:text-sm text-amber-950">
-              ⭐ {xpStars} XP
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap sm:flex-wrap shrink-0">
+            <div className="px-2.5 sm:px-3.5 py-1.5 rounded-full bg-yellow-200 border-2 border-amber-500 font-black text-xs sm:text-sm text-amber-950 whitespace-nowrap">
+              ⭐ {xpStars}<span className="hidden sm:inline"> XP</span>
             </div>
 
             <button
@@ -577,21 +579,24 @@ export default function EllaBellaPlatform() {
                   { text: "Tap Play, Learn, Color, or Beat Lab to explore with me!", lang: "en-US" },
                 ])
               }
-              className="px-4 py-2 rounded-full bg-gradient-to-b from-teal-300 to-teal-500 text-slate-950 font-black text-xs sm:text-sm border-3 border-white shadow-[0_3px_0_#0f766e] active:translate-y-0.5 cursor-pointer"
+              aria-label="Talk to Ella"
+              className="px-2.5 sm:px-4 py-2 rounded-full bg-gradient-to-b from-teal-300 to-teal-500 text-slate-950 font-black text-xs sm:text-sm border-3 border-white shadow-[0_3px_0_#0f766e] active:translate-y-0.5 cursor-pointer whitespace-nowrap"
             >
-              🔊 Talk to Ella!
+              🔊<span className="hidden sm:inline"> Talk to Ella!</span>
             </button>
 
             <button
               onClick={() => setShowProModal(true)}
-              className="px-4 py-2 rounded-full bg-gradient-to-b from-yellow-300 to-amber-500 text-slate-950 font-black text-xs sm:text-sm border-3 border-white shadow-[0_3px_0_#b45309] active:translate-y-0.5 cursor-pointer"
+              aria-label="Pro Pass"
+              className="px-2.5 sm:px-4 py-2 rounded-full bg-gradient-to-b from-yellow-300 to-amber-500 text-slate-950 font-black text-xs sm:text-sm border-3 border-white shadow-[0_3px_0_#b45309] active:translate-y-0.5 cursor-pointer whitespace-nowrap"
             >
-              👑 {isProUnlocked ? "PRO VIP" : "PRO $4.99"}
+              👑<span className="hidden sm:inline"> {isProUnlocked ? "PRO VIP" : "PRO $4.99"}</span>
             </button>
 
             <button
               onClick={() => setShowCartDrawer(true)}
-              className="px-3.5 py-2 rounded-full bg-pink-500 hover:bg-pink-600 text-white font-black text-xs sm:text-sm border-3 border-white shadow-[0_3px_0_#9d174d] cursor-pointer"
+              aria-label="Shopping bag"
+              className="px-2.5 sm:px-3.5 py-2 rounded-full bg-pink-500 hover:bg-pink-600 text-white font-black text-xs sm:text-sm border-3 border-white shadow-[0_3px_0_#9d174d] cursor-pointer whitespace-nowrap"
             >
               🛍️ {cart.reduce((s, i) => s + i.qty, 0)}
             </button>

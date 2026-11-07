@@ -202,7 +202,11 @@ export class BeatEngine {
       this.recDest = this.ctx.createMediaStreamDestination();
       this.master.connect(this.recDest);
     }
-    const mimeType = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find((t) => MediaRecorder.isTypeSupported(t));
+    // PASS 08.1: prefer MP4/AAC (.m4a) - plays natively on iPhone/iPad, Mac, Windows, Android.
+    // WebM is only a fallback: iOS can record it but cannot play it from Files.
+    const mimeType = ["audio/mp4;codecs=mp4a.40.2", "audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find((t) =>
+      MediaRecorder.isTypeSupported(t)
+    );
     try {
       this.recorder = mimeType ? new MediaRecorder(this.recDest.stream, { mimeType }) : new MediaRecorder(this.recDest.stream);
     } catch {
