@@ -280,6 +280,21 @@ export default function EndlessRunner({
   const [quizWord, setQuizWord] = useState<WordToken | null>(null);
   const [quizOptions, setQuizOptions] = useState<WordToken[]>([]);
   const wordBagRef = useRef(createWordBag(WORD_BANK.length)); // PASS 04: no repeats until all seen
+  // PASS 05.1: Big Screen mode - the game fills the viewport (largest when the phone is sideways).
+  const [bigScreen, setBigScreen] = useState(false);
+  useEffect(() => {
+    if (!bigScreen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden"; // no page scroll behind the game
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setBigScreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [bigScreen]);
 
   useEffect(() => {
     const stored =
@@ -693,12 +708,16 @@ export default function EndlessRunner({
       // PASS 05: size the bubble to its text so longer words fit.
       ctx.font = "900 14px sans-serif";
       const tokenLabel = `${token.emoji} ${token.es}`;
-      const pillW = Math.max(112, Math.ceil(ctx.measureText(tokenLabel).width) + 32);
+      const labelW = Math.ceil(ctx.measureText(tokenLabel).width);
+      const pillW = Math.max(112, labelW + 32);
       drawPill(s.tokenX - pillW / 2, bobY - 20, pillW, 40, 20, token.color, "#fef08a");
       ctx.fillStyle = "#ffffff";
       ctx.font = "900 14px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(tokenLabel, s.tokenX, bobY + 5);
+      // PASS 05.1: position the text from its measured width instead of relying on
+      // textAlign="center" (it rendered left-aligned from the centre on iPhone).
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText(tokenLabel, s.tokenX - labelW / 2, bobY + 5);
 
       // 4. Draw Hip-Hop Boombox Obstacle
       const obsY = GROUND_Y + 50 - 44;
@@ -1091,6 +1110,14 @@ export default function EndlessRunner({
             </button>
           )}
 
+          <button
+            type="button"
+            onClick={() => setBigScreen(true)}
+            className="px-3 py-1 rounded-full bg-cyan-100 hover:bg-cyan-200 text-cyan-950 font-black text-xs border border-cyan-400 cursor-pointer"
+          >
+            ⛶ Big Screen
+          </button>
+
           <label className="px-3 py-1 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-900 font-black text-xs border border-purple-400 cursor-pointer">
             📸 Load Sprite .JPG
             <input
@@ -1121,8 +1148,36 @@ export default function EndlessRunner({
         </div>
       </div>
 
+      {/* PASS 05.1: stage + JUMP button; in Big Screen they fill the viewport. */}
+      <div
+        className={
+          bigScreen
+            ? "fixed inset-0 z-[60] bg-indigo-950 p-2 flex flex-col gap-2"
+            : "flex flex-col gap-3"
+        }
+      >
+      {bigScreen && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="hidden portrait:inline px-3 py-1 rounded-full bg-white/15 text-white font-bold text-xs">
+            ↻ Turn your phone sideways for the biggest view
+          </span>
+          <button
+            type="button"
+            onClick={() => setBigScreen(false)}
+            className="ml-auto px-4 py-2 rounded-full bg-white text-slate-900 font-black text-sm cursor-pointer"
+          >
+            ✕ Exit Big Screen
+          </button>
+        </div>
+      )}
       {/* Interactive Game Stage */}
-      <div className="relative rounded-[2rem] overflow-hidden border-8 border-cyan-400 shadow-[0_10px_0_#0284c7] cursor-pointer select-none bg-sky-300">
+      <div
+        className={`relative overflow-hidden cursor-pointer select-none bg-sky-300 ${
+          bigScreen
+            ? "flex-1 min-h-0 rounded-2xl border-4 border-cyan-400"
+            : "rounded-[2rem] border-8 border-cyan-400 shadow-[0_10px_0_#0284c7]"
+        }`}
+      >
         {/* PASS 03: pointerdown on the canvas only; touch-action limited to the game surface. */}
         <canvas
           ref={canvasRef}
@@ -1132,7 +1187,7 @@ export default function EndlessRunner({
           style={{ touchAction: "none" }}
           aria-label="Ella Bella runner game. Tap or press Space to jump."
           role="img"
-          className="w-full h-[280px] sm:h-[285px] block"
+          className={bigScreen ? "w-full h-full block" : "w-full h-[280px] sm:h-[285px] block"}
         />
 
         {/* In-Game Bilingual Checkpoint Pop-Quiz (Every 5 Words Caught!) */}
@@ -1182,22 +1237,22 @@ export default function EndlessRunner({
           // bubbled to the stage). Its buttons stop propagation, so no double start.
           <div
             onClick={triggerJump}
-            className="absolute inset-0 bg-indigo-950/50 backdrop-blur-[2px] flex flex-col items-center justify-center p-4 text-center space-y-4"
+            className="absolute inset-0 bg-indigo-950/50 backdrop-blur-[2px] flex flex-col items-center justify-center p-3 sm:p-4 text-center gap-2 sm:gap-4"
           >
-            <h3 className="text-3xl sm:text-5xl font-black text-yellow-300 drop-shadow-[0_4px_0_#991b1b]">
+            <h3 className="text-2xl sm:text-5xl leading-tight font-black text-yellow-300 drop-shadow-[0_4px_0_#991b1b]">
               {gameOver ? `¡Brava! Score: ${score} ⭐` : "¡Vamos a Correr!"}
             </h3>
-            <p className="text-white font-bold text-xs sm:text-sm max-w-md bg-black/35 px-4 py-1.5 rounded-full">
+            <p className="text-white font-bold text-[11px] sm:text-sm max-w-md bg-black/35 px-4 py-1.5 rounded-full">
               Speed: {speedMode.label} • Tap Screen or Press SPACEBAR to Jump & Double-Jump!
             </p>
 
-            <div className="flex flex-wrap justify-center gap-4">
+            <div className="flex flex-wrap justify-center gap-2 sm:gap-4">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   triggerJump();
                 }}
-                className="px-8 py-4 rounded-full bg-gradient-to-b from-teal-300 to-teal-500 hover:from-teal-200 hover:to-teal-400 text-slate-950 font-black text-xl sm:text-2xl border-4 border-white shadow-[0_6px_0_#0f766e] active:translate-y-1 transition cursor-pointer"
+                className="pointer-coarse:hidden px-8 py-4 rounded-full bg-gradient-to-b from-teal-300 to-teal-500 hover:from-teal-200 hover:to-teal-400 text-slate-950 font-black text-xl sm:text-2xl border-4 border-white shadow-[0_6px_0_#0f766e] active:translate-y-1 transition cursor-pointer"
               >
                 {gameOver ? "🔄 PLAY AGAIN!" : "▶️ TAP TO RUN!"}
               </button>
@@ -1208,7 +1263,7 @@ export default function EndlessRunner({
                     e.stopPropagation();
                     onUnlockPro();
                   }}
-                  className="px-6 py-4 rounded-full bg-gradient-to-b from-yellow-300 to-amber-500 text-slate-950 font-black text-lg sm:text-xl border-4 border-white shadow-[0_6px_0_#92400e] active:translate-y-1 transition cursor-pointer"
+                  className="px-4 py-2 sm:px-6 sm:py-4 rounded-full bg-gradient-to-b from-yellow-300 to-amber-500 text-slate-950 font-black text-sm sm:text-xl border-2 sm:border-4 border-white shadow-[0_6px_0_#92400e] active:translate-y-1 transition cursor-pointer"
                 >
                   👑 UNLOCK ALL WORLDS
                 </button>
@@ -1233,6 +1288,7 @@ export default function EndlessRunner({
       >
         {isPlaying ? "⬆️ JUMP" : gameOver ? "🔄 PLAY AGAIN" : "▶️ START"}
       </button>
+      </div>
     </div>
   );
 }
