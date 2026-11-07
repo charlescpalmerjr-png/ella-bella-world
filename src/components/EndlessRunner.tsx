@@ -55,6 +55,78 @@ export const WORD_BANK: WordToken[] = [
   },
 ];
 
+// PASS 02 — local sprite upload validation (image never leaves the device).
+// MDN: File/Blob.type, Blob.size, Blob.slice(), Blob.arrayBuffer(), FileReader.readAsDataURL(),
+// HTMLImageElement.decode(), naturalWidth/naturalHeight.
+export const SPRITE_ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+export const SPRITE_MAX_BYTES = 2 * 1024 * 1024; // 2 MB (data URL adds ~33%, fits localStorage)
+export const SPRITE_MAX_DIMENSION = 4096; // px, either side
+
+const SAFE_DATA_URL_PREFIXES = SPRITE_ALLOWED_TYPES.map((t) => `data:${t};base64,`);
+
+/** True only for base64 data URLs of the supported formats (used for values read back from localStorage). */
+export function isSafeImageDataUrl(value: string | null): value is string {
+  return !!value && SAFE_DATA_URL_PREFIXES.some((prefix) => value.startsWith(prefix));
+}
+
+/** Checks the file's leading bytes match its claimed format (PNG, JPEG, WebP). */
+async function hasMatchingSignature(file: File): Promise<boolean> {
+  const b = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  if (file.type === "image/png") {
+    const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    return png.every((byte, i) => b[i] === byte);
+  }
+  if (file.type === "image/jpeg") {
+    return b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+  }
+  if (file.type === "image/webp") {
+    const ascii = (from: number, to: number) => String.fromCharCode(...b.slice(from, to));
+    return ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP";
+  }
+  return false;
+}
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+export type SpriteValidation =
+  | { ok: true; dataUrl: string; img: HTMLImageElement }
+  | { ok: false; reason: string };
+
+export async function validateSpriteFile(file: File): Promise<SpriteValidation> {
+  if (!(SPRITE_ALLOWED_TYPES as readonly string[]).includes(file.type)) {
+    return { ok: false, reason: "Please pick a PNG, JPG, or WebP picture." };
+  }
+  if (file.size === 0 || file.size > SPRITE_MAX_BYTES) {
+    return { ok: false, reason: "That picture is too big. Please use one under 2 MB." };
+  }
+  try {
+    if (!(await hasMatchingSignature(file))) {
+      return { ok: false, reason: "That file isn't a real picture. Please try another one." };
+    }
+    const dataUrl = await readAsDataUrl(file);
+    if (!isSafeImageDataUrl(dataUrl)) {
+      return { ok: false, reason: "That file isn't a real picture. Please try another one." };
+    }
+    const img = new Image();
+    img.src = dataUrl;
+    await img.decode();
+    const { naturalWidth: w, naturalHeight: h } = img;
+    if (!w || !h || w > SPRITE_MAX_DIMENSION || h > SPRITE_MAX_DIMENSION) {
+      return { ok: false, reason: "That picture's size won't work. Please try another one." };
+    }
+    return { ok: true, dataUrl, img };
+  } catch {
+    return { ok: false, reason: "We couldn't open that picture. Please try another one." };
+  }
+}
+
 type WorldConfig = {
   id: number;
   name: string;
@@ -157,8 +229,9 @@ export default function EndlessRunner({
   const [quizWord, setQuizWord] = useState<WordToken | null>(null);
 
   useEffect(() => {
-    const savedCustomSprite =
+    const stored =
       typeof window !== "undefined" ? localStorage.getItem("ella_sprite_img") : null;
+    const savedCustomSprite = isSafeImageDataUrl(stored) ? stored : null;
     const activeSrc = savedCustomSprite || spriteSrc;
 
     const img = new Image();
@@ -171,32 +244,28 @@ export default function EndlessRunner({
     img.src = activeSrc;
   }, [spriteSrc]);
 
-  const handleDirectSpriteUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleDirectSpriteUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    input.value = ""; // allow re-selecting the same file after a rejection
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const img = new Image();
-      img.onload = () => {
-        spriteImgRef.current = img;
-        setSpriteLoaded(true);
-        setUsePhotoSprite(true);
-      };
-      img.src = dataUrl;
-      try {
-        localStorage.setItem("ella_sprite_img", dataUrl);
-      } catch {
-        // Ignore quota errors
-      }
-      fetch("/api/platform", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "persist_images", spriteDataUrl: dataUrl }),
-      }).catch(() => {});
-      speakInstant("¡Lista! Photo sprite loaded and facing forward!", "es-US");
-    };
-    reader.readAsDataURL(file);
+
+    const result = await validateSpriteFile(file);
+    if (!result.ok) {
+      setPopWord(`📸 ${result.reason}`);
+      return;
+    }
+
+    spriteImgRef.current = result.img;
+    setSpriteLoaded(true);
+    setUsePhotoSprite(true);
+    try {
+      localStorage.setItem("ella_sprite_img", result.dataUrl);
+    } catch {
+      // Storage full: the sprite still works for this visit, it just won't be remembered.
+    }
+    // PASS 02: the photo stays on this device only; it is never sent to the server.
+    speakInstant("¡Lista! Photo sprite loaded and facing forward!", "es-US");
   };
 
   const stateRef = useRef({
@@ -915,7 +984,7 @@ export default function EndlessRunner({
             📸 Load Sprite .JPG
             <input
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/webp"
               onChange={handleDirectSpriteUpload}
               className="hidden"
             />

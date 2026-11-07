@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import EndlessRunner, { WORD_BANK } from "@/components/EndlessRunner";
+import EndlessRunner, { WORD_BANK, isSafeImageDataUrl } from "@/components/EndlessRunner";
 
 type KidTab = "play" | "words" | "shop" | "watch";
 
@@ -237,7 +237,8 @@ const COLOR_PALETTE = [
 
 export default function EllaBellaPlatform() {
   const [activeTab, setActiveTab] = useState<KidTab>("play");
-  const [isProUnlocked, setIsProUnlocked] = useState(false);
+  // PASS 02: Pro is never granted client-side. PASS 07 replaces this with a server entitlement.
+  const isProUnlocked = false;
   const [showProModal, setShowProModal] = useState(false);
   const [showCartDrawer, setShowCartDrawer] = useState(false);
   const [xpStars, setXpStars] = useState(100);
@@ -264,8 +265,6 @@ export default function EllaBellaPlatform() {
   const [selectedSize, setSelectedSize] = useState<string>("Youth M");
   const [promoCode, setPromoCode] = useState<string>("");
   const [discountApplied, setDiscountApplied] = useState<boolean>(false);
-  const [parentEmail, setParentEmail] = useState("");
-  const [checkoutReceipt, setCheckoutReceipt] = useState<string | null>(null);
 
   // Beat Lab & Sing-Along TV State
   const [activeEpisode, setActiveEpisode] = useState(EPISODES[0]);
@@ -283,29 +282,22 @@ export default function EllaBellaPlatform() {
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
 
-  // Auto-persist any cached images to disk (/public/ella-cover.jpg) so the Header is 100% Permanent!
+  // Restore on-device preferences. PASS 02: images are no longer uploaded to the server,
+  // and Pro access is no longer granted from a browser flag (server entitlements come in PASS 07).
   useEffect(() => {
     if (typeof window === "undefined") return;
     const savedCover = localStorage.getItem("ella_cover_img");
     const savedSprite = localStorage.getItem("ella_sprite_img");
-    const savedPro = localStorage.getItem("ella_pro_unlocked");
     const savedXp = localStorage.getItem("ella_xp_stars");
 
-    if (savedCover) setCoverSrc(savedCover);
-    if (savedSprite) setSpriteSrc(savedSprite);
-    if (savedPro === "true") setIsProUnlocked(true);
+    if (isSafeImageDataUrl(savedCover)) setCoverSrc(savedCover);
+    if (isSafeImageDataUrl(savedSprite)) setSpriteSrc(savedSprite);
     if (savedXp) setXpStars(Number(savedXp) || 100);
 
-    if (savedCover || savedSprite) {
-      fetch("/api/platform", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "persist_images",
-          coverDataUrl: savedCover,
-          spriteDataUrl: savedSprite,
-        }),
-      }).catch(() => {});
+    try {
+      localStorage.removeItem("ella_pro_unlocked");
+    } catch {
+      // Ignore
     }
 
     if ("speechSynthesis" in window) {
@@ -1391,39 +1383,18 @@ export default function EllaBellaPlatform() {
                 <span>Total {discountApplied ? "(15% Off)" : ""}:</span>
                 <span className="text-teal-600">${finalTotal}</span>
               </div>
-              <input
-                type="email"
-                placeholder="Parent Email for Digital PDF & Order Tracking"
-                value={parentEmail}
-                onChange={(e) => setParentEmail(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl border-2 border-slate-300 font-bold text-sm"
-              />
-              {checkoutReceipt && (
-                <div className="p-3 rounded-2xl bg-emerald-100 text-emerald-900 font-black text-xs text-center">
-                  {checkoutReceipt}
-                </div>
-              )}
+              {/* PASS 02: no email collection and no fake order confirmation in the kids' UI.
+                  Real checkout (behind a parent gate) arrives in PASS 07. */}
+              <div className="p-3 rounded-2xl bg-amber-100 text-amber-900 font-black text-xs text-center">
+                Preview only — the shop opens soon. Nothing will be charged.
+              </div>
               <button
-                onClick={async () => {
-                  const res = await fetch("/api/platform", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      action: "checkout",
-                      cart,
-                      email: parentEmail,
-                      total: finalTotal,
-                    }),
-                  });
-                  const data = await res.json();
-                  setCheckoutReceipt(data.message);
-                  earnStars(100);
-                  speakInstant("¡Gracias! Order confirmed!", "es-US");
-                  setCart([]);
-                }}
-                className="w-full py-4 rounded-full bg-gradient-to-r from-pink-500 to-rose-600 text-white font-black text-lg shadow-[0_5px_0_#9f1239] cursor-pointer"
+                type="button"
+                disabled
+                aria-disabled="true"
+                className="w-full py-4 rounded-full bg-slate-300 text-slate-600 font-black text-lg cursor-not-allowed"
               >
-                🔒 Complete Instant Checkout (${finalTotal})
+                🔒 Checkout Coming Soon
               </button>
             </div>
           </div>
@@ -1455,23 +1426,19 @@ export default function EllaBellaPlatform() {
               <div>✅ 15% VIP Code (ELLAVIP) on Hoodies & Graphic Tees</div>
             </div>
 
+            {/* PASS 02: this button used to grant Pro for free while showing a price.
+                Real purchase + server entitlements arrive in PASS 07. */}
             <button
-              onClick={() => {
-                setIsProUnlocked(true);
-                setDiscountApplied(true);
-                try {
-                  localStorage.setItem("ella_pro_unlocked", "true");
-                } catch {
-                  // Ignore
-                }
-                setShowProModal(false);
-                earnStars(200);
-                speakInstant("¡Increíble! All Pro Worlds Unlocked!", "es-US");
-              }}
-              className="w-full py-4 rounded-full bg-gradient-to-b from-pink-400 to-rose-600 text-white font-black text-xl border-4 border-white shadow-[0_6px_0_#9f1239] cursor-pointer"
+              type="button"
+              disabled
+              aria-disabled="true"
+              className="w-full py-4 rounded-full bg-slate-300 text-slate-600 font-black text-xl border-4 border-white cursor-not-allowed"
             >
-              ACTIVATE PRO PASS — $4.99/mo
+              PRO PASS — COMING SOON
             </button>
+            <p className="text-xs font-bold text-slate-500">
+              Grown-ups: memberships are not on sale yet. Nothing will be charged.
+            </p>
           </div>
         </div>
       )}
